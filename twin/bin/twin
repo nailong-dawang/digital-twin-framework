@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""twin - digital-twin-framework 脚手架 CLI.
+
+Usage:
+  twin init [--dir ~/.twin]     # 初始化分身目录结构
+  twin status                    # 查看各工具状态
+  twin doctor                    # 自检
+"""
+import os, sys, argparse
+
+def init(target_dir):
+    target = os.path.expanduser(target_dir)
+    os.makedirs(os.path.join(target, "data"), exist_ok=True)
+    # 写默认配置
+    config_path = os.path.join(target, "config.yaml")
+    if not os.path.exists(config_path):
+        with open(config_path, "w") as f:
+            f.write("""# 数字分身配置
+identity:
+  name: "Your Name"
+  handle: "your_handle"
+  bio: "开发者 | AI 博主"
+  languages: ["zh", "en"]
+
+heartbeat:
+  interval_minutes: 30
+  session_min_minutes: 15
+  session_max_minutes: 30
+
+paths:
+  data_dir: "./data"
+""")
+    print(f"✓ 初始化完成: {target}")
+    print(f"  配置文件: {config_path}")
+    print(f"  数据目录: {target}/data")
+    print()
+    print("下一步:")
+    print("  1. 编辑 config.yaml，填你的身份信息")
+    print("  2. export TWIN_HOME=" + target)
+    print("  3. 在 Muse 里创建 3 个 cron（模板见 templates/）")
+
+def status():
+    home = os.path.expanduser(os.getenv("TWIN_HOME", "~/.twin"))
+    print(f"TWIN_HOME: {home}")
+    data = os.path.join(home, "data")
+    if not os.path.exists(data):
+        print("  未初始化，运行: twin init")
+        return
+    import glob
+    for f in sorted(glob.glob(os.path.join(data, "*.json*"))):
+        print(f"  ✓ {os.path.basename(f)}")
+
+def doctor():
+    import subprocess
+    twin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    tools = ["state", "memory", "people", "threads", "opinions",
+             "vibe", "context", "evolve-log", "heartbeat-lock",
+             "heartbeat-log", "mood", "novelty", "rhythm"]
+    ok, fail = 0, 0
+    for t in tools:
+        p = os.path.join(twin_dir, f"{t}.py")
+        r = subprocess.run(["python3", "-m", "py_compile", p],
+                           capture_output=True)
+        if r.returncode == 0:
+            ok += 1
+        else:
+            fail += 1
+            print(f"  ✗ {t}.py 编译失败")
+    print(f"自检: {ok} 通过, {fail} 失败")
+
+if __name__ == "__main__":
+    p = argparse.ArgumentParser()
+    sub = p.add_subparsers(dest="cmd", required=True)
+    i = sub.add_parser("init")
+    i.add_argument("--dir", default="~/.twin")
+    sub.add_parser("status")
+    sub.add_parser("doctor")
+    args = p.parse_args()
+    if args.cmd == "init":
+        init(args.dir)
+    elif args.cmd == "status":
+        status()
+    elif args.cmd == "doctor":
+        doctor()
