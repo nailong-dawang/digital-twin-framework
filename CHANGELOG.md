@@ -2,6 +2,7 @@
 
 ## Unreleased
 - `twin backup`: snapshot `TWIN_HOME/data` into a timestamped tarball under `TWIN_HOME/backups/`
+- `twin restore [--list | <file>]`: restore data from a backup; auto-snapshots current data first (`twin-pre-restore-*`); refuses tarballs with paths outside `data/` (path-traversal guard)
 - `twin doctor`: exits non-zero when any check fails; adds a backup round-trip smoke test in a sandbox `TWIN_HOME` (does not touch the real data dir)
 
 ## 2026-10-14 — CLI one-entry-point

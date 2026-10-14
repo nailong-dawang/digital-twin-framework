@@ -41,6 +41,7 @@ twin init                    # Init ~/.twin
 export TWIN_HOME=~/.twin
 twin doctor                  # Self-check
 twin backup                  # Snapshot data/ into backups/
+twin restore                 # Restore latest backup (auto-snapshots current data first)
 ```
 
 Then create 3 crons in Muse (templates in `templates/`):
@@ -125,6 +126,7 @@ twin init                    # 初始化 ~/.twin
 export TWIN_HOME=~/.twin
 twin doctor                  # 自检
 twin backup                  # 快照 data/ 到 backups/
+twin restore                 # 恢复最新备份（恢复前自动先快照当前数据）
 ```
 
 然后在 Muse 里创建 3 个 cron（模板见 `templates/`）：

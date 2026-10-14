@@ -6,6 +6,7 @@ Usage:
   twin status                  # 查看数据目录状态
   twin doctor                  # 自检：编译全部工具 + 调度冒烟测试
   twin backup                  # 快照 TWIN_HOME/data 到 backups/（tar.gz）
+  twin restore [--list | <file>]  # 从备份恢复；默认最新；恢复前自动快照当前 data
   twin <tool> [args...]        # 调度到对应工具，如 twin mood roll / twin state check
 """
 import os, sys, argparse, subprocess, tarfile, tempfile, glob
@@ -72,6 +73,13 @@ def dispatch(tool, args):
 def backup():
     """快照 TWIN_HOME/data 为时间戳 tar.gz，存入 TWIN_HOME/backups/。"""
     home = os.path.expanduser(os.getenv("TWIN_HOME", "~/.twin"))
+    dest = _do_backup(home)
+    data = os.path.join(home, "data")
+    n = sum(len(files) for _, _, files in os.walk(data))
+    print(f"✓ 备份完成: {dest}（{n} 个文件）")
+
+def _do_backup(home, label="backup"):
+    """实际执行一次快照，返回 tarball 路径。"""
     data = os.path.join(home, "data")
     if not os.path.isdir(data):
         print(f"数据目录不存在: {data}（先运行 twin init）", file=sys.stderr)
@@ -79,11 +87,49 @@ def backup():
     bdir = os.path.join(home, "backups")
     os.makedirs(bdir, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    dest = os.path.join(bdir, f"twin-backup-{ts}.tar.gz")
+    dest = os.path.join(bdir, f"twin-{label}-{ts}.tar.gz")
     with tarfile.open(dest, "w:gz") as tf:
         tf.add(data, arcname="data")
-    n = sum(len(files) for _, _, files in os.walk(data))
-    print(f"✓ 备份完成: {dest}（{n} 个文件）")
+    return dest
+
+def list_backups(home):
+    bdir = os.path.join(home, "backups")
+    return sorted(glob.glob(os.path.join(bdir, "twin-backup-*.tar.gz")))
+
+def restore(args):
+    home = os.path.expanduser(os.getenv("TWIN_HOME", "~/.twin"))
+    data = os.path.join(home, "data")
+    if args and args[0] == "--list":
+        for b in list_backups(home):
+            print(os.path.basename(b))
+        return
+    backups = list_backups(home)
+    if args:
+        cand = args[0]
+        dest = cand if os.path.isabs(cand) else os.path.join(home, "backups", cand)
+        if not os.path.isfile(dest):
+            print(f"备份不存在: {cand}", file=sys.stderr)
+            sys.exit(2)
+    elif backups:
+        dest = backups[-1]
+    else:
+        print("没有可用备份（先运行 twin backup）", file=sys.stderr)
+        sys.exit(2)
+    # 安全：先快照当前 data，再覆盖
+    if os.path.isdir(data):
+        pre = _do_backup(home, label="pre-restore")
+        print(f"  已先快照当前数据: {os.path.basename(pre)}")
+    import shutil
+    shutil.rmtree(data, ignore_errors=True)
+    with tarfile.open(dest) as tf:
+        # 路径穿越防护：只允许 data/ 下的相对路径
+        for m in tf.getmembers():
+            p = os.path.normpath(m.name)
+            if p.startswith("..") or os.path.isabs(p) or not (p == "data" or p.startswith("data/")):
+                print(f"备份包含非法路径，已拒绝恢复: {m.name}", file=sys.stderr)
+                sys.exit(3)
+        tf.extractall(path=home)
+    print(f"✓ 已从 {os.path.basename(dest)} 恢复到 {data}")
 
 def _backup_smoke():
     """备份往返冒烟测试：在沙盒 TWIN_HOME 里备份并校验 tarball 可读。"""
@@ -161,5 +207,7 @@ if __name__ == "__main__":
         doctor()
     elif cmd == "backup":
         backup()
+    elif cmd == "restore":
+        restore(argv[1:])
     else:
         dispatch(cmd, argv[1:])
