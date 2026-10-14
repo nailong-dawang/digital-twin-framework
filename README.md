@@ -40,6 +40,7 @@ twin init                    # Init ~/.twin
 # Edit ~/.twin/config.yaml with your identity
 export TWIN_HOME=~/.twin
 twin doctor                  # Self-check
+twin backup                  # Snapshot data/ into backups/
 ```
 
 Then create 3 crons in Muse (templates in `templates/`):
@@ -74,7 +75,9 @@ twin <tool> [args...]   # e.g. twin mood roll, twin state check, twin threads ac
 ```
 
 Arguments pass straight through and `TWIN_HOME` is inherited. Run `twin doctor`
-after cloning — it compiles every tool and smoke-tests the dispatch path.
+after cloning — it compiles every tool, smoke-tests the dispatch path, and
+verifies a backup round-trip in a sandbox. Run `twin backup` before risky
+changes; snapshots land in `TWIN_HOME/backups/` as timestamped tarballs.
 
 ### Design Philosophy
 
@@ -121,6 +124,7 @@ twin init                    # 初始化 ~/.twin
 # 编辑 ~/.twin/config.yaml，填你的身份
 export TWIN_HOME=~/.twin
 twin doctor                  # 自检
+twin backup                  # 快照 data/ 到 backups/
 ```
 
 然后在 Muse 里创建 3 个 cron（模板见 `templates/`）：
@@ -155,7 +159,8 @@ twin <tool> [args...]   # 如 twin mood roll、twin state check、twin threads a
 ```
 
 参数原样透传，`TWIN_HOME` 自动继承。clone 后先跑 `twin doctor`——
-编译全部工具并对调度链路做冒烟测试。
+编译全部工具、冒烟测试调度链路，并在沙盒里验证一次备份往返。
+动大手术前跑 `twin backup`，快照以时间戳 tarball 存进 `TWIN_HOME/backups/`。
 
 ### 设计哲学
 

@@ -5,9 +5,11 @@ Usage:
   twin init [--dir ~/.twin]   # 初始化分身目录结构
   twin status                  # 查看数据目录状态
   twin doctor                  # 自检：编译全部工具 + 调度冒烟测试
+  twin backup                  # 快照 TWIN_HOME/data 到 backups/（tar.gz）
   twin <tool> [args...]        # 调度到对应工具，如 twin mood roll / twin state check
 """
-import os, sys, argparse, subprocess
+import os, sys, argparse, subprocess, tarfile, tempfile, glob
+from datetime import datetime
 
 TOOLS = ["state", "memory", "people", "threads", "opinions",
          "vibe", "context", "evolve-log", "heartbeat-lock",
@@ -67,6 +69,39 @@ def dispatch(tool, args):
         sys.exit(2)
     os.execvpe(sys.executable, [sys.executable, path] + args, os.environ)
 
+def backup():
+    """快照 TWIN_HOME/data 为时间戳 tar.gz，存入 TWIN_HOME/backups/。"""
+    home = os.path.expanduser(os.getenv("TWIN_HOME", "~/.twin"))
+    data = os.path.join(home, "data")
+    if not os.path.isdir(data):
+        print(f"数据目录不存在: {data}（先运行 twin init）", file=sys.stderr)
+        sys.exit(2)
+    bdir = os.path.join(home, "backups")
+    os.makedirs(bdir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = os.path.join(bdir, f"twin-backup-{ts}.tar.gz")
+    with tarfile.open(dest, "w:gz") as tf:
+        tf.add(data, arcname="data")
+    n = sum(len(files) for _, _, files in os.walk(data))
+    print(f"✓ 备份完成: {dest}（{n} 个文件）")
+
+def _backup_smoke():
+    """备份往返冒烟测试：在沙盒 TWIN_HOME 里备份并校验 tarball 可读。"""
+    sandbox = tempfile.mkdtemp(prefix="twin-doctor-")
+    data = os.path.join(sandbox, "data")
+    os.makedirs(data)
+    with open(os.path.join(data, "probe.json"), "w") as f:
+        f.write("{}")
+    env = dict(os.environ, TWIN_HOME=sandbox)
+    r = subprocess.run([sys.executable, os.path.abspath(__file__), "backup"],
+                       capture_output=True, text=True, env=env)
+    hits = glob.glob(os.path.join(sandbox, "backups", "twin-backup-*.tar.gz"))
+    ok = r.returncode == 0 and len(hits) == 1
+    if ok:
+        with tarfile.open(hits[0]) as tf:
+            ok = "data/probe.json" in tf.getnames()
+    return ok
+
 def doctor():
     ok, fail = 0, 0
     for t in TOOLS:
@@ -89,7 +124,19 @@ def doctor():
     except Exception:
         fail += 1
         print(f"  ✗ 调度冒烟测试失败: {smoke.stderr.strip()[:200]}")
+    # 备份往返冒烟测试（沙盒，不污染真实 TWIN_HOME）
+    try:
+        if _backup_smoke():
+            print("  ✓ 备份往返冒烟测试通过 (sandbox backup -> tarball 可读)")
+        else:
+            fail += 1
+            print("  ✗ 备份往返冒烟测试失败")
+    except Exception as e:
+        fail += 1
+        print(f"  ✗ 备份往返冒烟测试异常: {e}")
     print(f"自检: {ok} 通过, {fail} 失败")
+    if fail:
+        sys.exit(1)
 
 def usage():
     print(__doc__.strip())
@@ -112,5 +159,7 @@ if __name__ == "__main__":
         status()
     elif cmd == "doctor":
         doctor()
+    elif cmd == "backup":
+        backup()
     else:
         dispatch(cmd, argv[1:])
