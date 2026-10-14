@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
-"""twin - digital-twin-framework 脚手架 CLI.
+"""twin - digital-twin-framework 统一 CLI 入口.
 
 Usage:
-  twin init [--dir ~/.twin]     # 初始化分身目录结构
-  twin status                    # 查看各工具状态
-  twin doctor                    # 自检
+  twin init [--dir ~/.twin]   # 初始化分身目录结构
+  twin status                  # 查看数据目录状态
+  twin doctor                  # 自检：编译全部工具 + 调度冒烟测试
+  twin <tool> [args...]        # 调度到对应工具，如 twin mood roll / twin state check
 """
-import os, sys, argparse
+import os, sys, argparse, subprocess
+
+TOOLS = ["state", "memory", "people", "threads", "opinions",
+         "vibe", "context", "evolve-log", "heartbeat-lock",
+         "heartbeat-log", "mood", "novelty", "rhythm"]
+
+def twin_dir():
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def init(target_dir):
     target = os.path.expanduser(target_dir)
@@ -50,35 +58,59 @@ def status():
     for f in sorted(glob.glob(os.path.join(data, "*.json*"))):
         print(f"  ✓ {os.path.basename(f)}")
 
+def dispatch(tool, args):
+    """把命令转发给 twin/<tool>.py，继承环境变量（含 TWIN_HOME）。"""
+    path = os.path.join(twin_dir(), f"{tool}.py")
+    if not os.path.exists(path):
+        print(f"未知工具: {tool}\n", file=sys.stderr)
+        print("可用工具: " + ", ".join(TOOLS), file=sys.stderr)
+        sys.exit(2)
+    os.execvpe(sys.executable, [sys.executable, path] + args, os.environ)
+
 def doctor():
-    import subprocess
-    twin_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    tools = ["state", "memory", "people", "threads", "opinions",
-             "vibe", "context", "evolve-log", "heartbeat-lock",
-             "heartbeat-log", "mood", "novelty", "rhythm"]
     ok, fail = 0, 0
-    for t in tools:
-        p = os.path.join(twin_dir, f"{t}.py")
-        r = subprocess.run(["python3", "-m", "py_compile", p],
+    for t in TOOLS:
+        p = os.path.join(twin_dir(), f"{t}.py")
+        r = subprocess.run([sys.executable, "-m", "py_compile", p],
                            capture_output=True)
         if r.returncode == 0:
             ok += 1
         else:
             fail += 1
             print(f"  ✗ {t}.py 编译失败")
+    # 调度冒烟测试：走一次真实转发链路
+    smoke = subprocess.run([sys.executable, os.path.abspath(__file__),
+                            "mood", "roll"], capture_output=True, text=True)
+    try:
+        import json
+        out = json.loads(smoke.stdout)
+        assert "mood" in out
+        print(f"  ✓ 调度冒烟测试通过 (twin mood roll -> {out['mood']})")
+    except Exception:
+        fail += 1
+        print(f"  ✗ 调度冒烟测试失败: {smoke.stderr.strip()[:200]}")
     print(f"自检: {ok} 通过, {fail} 失败")
 
+def usage():
+    print(__doc__.strip())
+    print()
+    print("可用工具:")
+    print("  " + ", ".join(TOOLS))
+
 if __name__ == "__main__":
-    p = argparse.ArgumentParser()
-    sub = p.add_subparsers(dest="cmd", required=True)
-    i = sub.add_parser("init")
-    i.add_argument("--dir", default="~/.twin")
-    sub.add_parser("status")
-    sub.add_parser("doctor")
-    args = p.parse_args()
-    if args.cmd == "init":
-        init(args.dir)
-    elif args.cmd == "status":
+    argv = sys.argv[1:]
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        usage()
+        sys.exit(0)
+    cmd = argv[0]
+    if cmd == "init":
+        p = argparse.ArgumentParser()
+        p.add_argument("--dir", default="~/.twin")
+        a = p.parse_args(argv[1:])
+        init(a.dir)
+    elif cmd == "status":
         status()
-    elif args.cmd == "doctor":
+    elif cmd == "doctor":
         doctor()
+    else:
+        dispatch(cmd, argv[1:])

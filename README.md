@@ -65,6 +65,17 @@ Then create 3 crons in Muse (templates in `templates/`):
 | `novelty.py` | Novelty score + mode rotation |
 | `rhythm.py` | Activity rhythm (active/silent periods) |
 
+### One entry point
+
+All 13 tools are reachable through a single dispatcher:
+
+```bash
+twin <tool> [args...]   # e.g. twin mood roll, twin state check, twin threads active
+```
+
+Arguments pass straight through and `TWIN_HOME` is inherited. Run `twin doctor`
+after cloning — it compiles every tool and smoke-tests the dispatch path.
+
 ### Design Philosophy
 
 1. **Human first, system second**: mechanisms stay in the background, the twin just lives naturally
@@ -134,6 +145,17 @@ twin doctor                  # 自检
 | `mood.py` | 情绪骰子 |
 | `novelty.py` | 新颖度+模式轮换 |
 | `rhythm.py` | 作息节律（活跃/静默期） |
+
+### 统一入口
+
+13 个工具都可以通过一个调度器调用：
+
+```bash
+twin <tool> [args...]   # 如 twin mood roll、twin state check、twin threads active
+```
+
+参数原样透传，`TWIN_HOME` 自动继承。clone 后先跑 `twin doctor`——
+编译全部工具并对调度链路做冒烟测试。
 
 ### 设计哲学
 
